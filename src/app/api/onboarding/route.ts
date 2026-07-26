@@ -4,14 +4,12 @@ import { db } from "@/db";
 import { profiles } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
+import { PDFParse } from "pdf-parse";
 
 export async function POST(request: NextRequest) {
   try {
     const session = await auth.api.getSession({ headers: request.headers });
-
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const formData = await request.formData();
     const status = formData.get("status") as string;
@@ -22,51 +20,41 @@ export async function POST(request: NextRequest) {
     const contactEmail = formData.get("contactEmail") as string;
     const resume = formData.get("resume") as File | null;
 
-    let resumeData = "";
-    let resumeFileName = "";
+    let resumeData = "", resumeFileName = "";
+    let bytes: ArrayBuffer | null = null;
     if (resume) {
-      const bytes = await resume.arrayBuffer();
+      bytes = await resume.arrayBuffer();
       resumeData = Buffer.from(bytes).toString("base64");
       resumeFileName = resume.name || "resume.pdf";
     }
 
-    // Check if profile already exists
-    const existingProfile = await db
-      .select()
-      .from(profiles)
-      .where(eq(profiles.userId, session.user.id))
-      .limit(1);
+    let parsedSkills: string[] = [];
+    let parsedExperienceSummary = "";
+    if (resume && bytes) {
+      const parser = new PDFParse({ data: Buffer.from(bytes) });
+      const result = await parser.getText();
+      const rawText = result.text;
+      const SKILL_BANK = ["react", "node", "python", "sql", "typescript", "next.js", "aws", "docker"];
+      parsedSkills = SKILL_BANK.filter((s) => rawText.toLowerCase().includes(s));
+      parsedExperienceSummary = rawText.slice(0, 500);
+    }
+
+    const existingProfile = await db.select().from(profiles).where(eq(profiles.userId, session.user.id)).limit(1);
 
     if (existingProfile.length > 0) {
-      // Update existing profile
-      await db
-        .update(profiles)
-        .set({
-          status,
-          field,
-          subdomains,
-          locationPreferences,
-          experienceLevel,
-          contactEmail,
-          resumeData: resumeData || existingProfile[0].resumeData,
-          resumeFileName: resumeFileName || existingProfile[0].resumeFileName,
-          onboardingCompleted: true,
-          updatedAt: new Date(),
-        })
-        .where(eq(profiles.userId, session.user.id));
+      await db.update(profiles).set({
+        status, field, subdomains, locationPreferences, experienceLevel, contactEmail,
+        resumeData: resumeData || existingProfile[0].resumeData,
+        resumeFileName: resumeFileName || existingProfile[0].resumeFileName,
+        parsedSkills: parsedSkills.length ? parsedSkills : existingProfile[0].parsedSkills,
+        parsedExperienceSummary: parsedExperienceSummary || existingProfile[0].parsedExperienceSummary,
+        onboardingCompleted: true,
+        updatedAt: new Date(),
+      }).where(eq(profiles.userId, session.user.id));
     } else {
-      // Create new profile
       await db.insert(profiles).values({
-        id: uuidv4(),
-        userId: session.user.id,
-        status,
-        field,
-        subdomains,
-        locationPreferences,
-        experienceLevel,
-        contactEmail,
-        resumeData,
-        resumeFileName,
+        id: uuidv4(), userId: session.user.id, status, field, subdomains, locationPreferences,
+        experienceLevel, contactEmail, resumeData, resumeFileName, parsedSkills, parsedExperienceSummary,
         onboardingCompleted: true,
       });
     }
