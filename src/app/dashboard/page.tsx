@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession, signOut } from "@/lib/auth-client";
+import { matchPercent } from "@/lib/match";
 
 interface Listing {
   id: string;
@@ -23,10 +24,11 @@ export default function DashboardPage() {
   const router = useRouter();
   const { data: session, isPending } = useSession();
   const [listings, setListings] = useState<Listing[]>([]);
+  const [userSkills, setUserSkills] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncLoading, setSyncLoading] = useState(false);
 
- useEffect(() => {
+  useEffect(() => {
     if (!isPending && !session) {
       router.push("/signin");
     }
@@ -46,10 +48,11 @@ export default function DashboardPage() {
         router.push("/onboarding");
         return;
       }
+      setUserSkills(data.profile.parsedSkills || []);
       fetchListings();
     } catch (error) {
       console.error("Failed to check profile:", error);
-      fetchListings(); // fail open so a network hiccup doesn't lock you out
+      fetchListings();
     }
   };
 
@@ -98,7 +101,6 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <header className="bg-white shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between">
@@ -131,7 +133,6 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
         <div className="mb-6">
           <h2 className="text-xl font-semibold text-gray-900">Recommended Jobs</h2>
@@ -172,6 +173,9 @@ export default function DashboardPage() {
                     <div className="mt-4 flex flex-wrap gap-2">
                       <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                         {listing.source}
+                      </span>
+                      <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                        {matchPercent(userSkills, listing.tags)}% match
                       </span>
                       {listing.field && (
                         <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">

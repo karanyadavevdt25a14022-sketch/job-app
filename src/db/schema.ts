@@ -42,6 +42,7 @@ export const accounts = pgTable("accounts", {
 
 // User profiles (onboarding data)
 export const profiles = pgTable("profiles", {
+
   id: text("id").primaryKey(),
   userId: text("user_id").notNull().unique().references(() => users.id, { onDelete: "cascade" }),
   status: text("status").notNull(), // internship, placement, job
@@ -51,11 +52,26 @@ export const profiles = pgTable("profiles", {
   experienceLevel: text("experience_level"), // fresher, 0-2, 2-5, 5+
   resumeUrl: text("resume_url"), // kept for backward compatibility, unused going forward
   resumeData: text("resume_data"), // base64-encoded PDF bytes, stored directly in Postgres
+  parsedSkills: jsonb("parsed_skills").$type<string[]>().default([]),
+parsedExperienceSummary: text("parsed_experience_summary"),
+applicationsSentCount: integer("applications_sent_count").default(0),
+applicationsResponseCount: integer("applications_response_count").default(0),
   resumeFileName: text("resume_file_name"),
   contactEmail: text("contact_email"),
   onboardingCompleted: boolean("onboarding_completed").default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  
+});
+
+// --- New: Notifications table ---
+export const notifications = pgTable("notifications", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  message: text("message").notNull(),
+  type: text("type").notNull(), // job_alert, application_update
+  readStatus: boolean("read_status").default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 // Job listings
@@ -83,7 +99,8 @@ export const applications = pgTable("applications", {
   id: text("id").primaryKey(),
   userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   listingId: text("listing_id").notNull().references(() => listings.id, { onDelete: "cascade" }),
-  status: text("status").default("sent"), // sent, viewed, responded, rejected
+  status: text("status").default("applied"), // applied, responded, pending, rejected
+  respondedAt: timestamp("responded_at"),
   emailContent: text("email_content"),
   appliedAt: timestamp("applied_at").defaultNow().notNull(),
 });
@@ -117,3 +134,4 @@ export type Profile = typeof profiles.$inferSelect;
 export type Listing = typeof listings.$inferSelect;
 export type Application = typeof applications.$inferSelect;
 export type GmailToken = typeof gmailTokens.$inferSelect;
+export type Notification = typeof notifications.$inferSelect;
